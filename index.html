@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC P2P 채팅 (Modern UI)</title>
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #1f1c2c 0%, #928dab 100%);
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --primary-color: #6c5ce7;
+            --primary-hover: #5649c0;
+            --text-main: #ffffff;
+            --text-sub: #b2bec3;
+            --bubble-local: #6c5ce7;
+            --bubble-remote: #2d3436;
+            --system-msg: #00cec9;
+            --error-msg: #ff7675;
+            --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 스크롤바 커스텀 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            height: 95%;
+            max-height: 900px;
+            background: rgba(30, 30, 30, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* --- Signaling Section --- */
+        #signaling-container {
+            padding: 30px;
+            overflow-y: auto;
+            height: 100%;
+        }
+
+        #signaling-container h2 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-weight: 700;
+            background: linear-gradient(to right, #a29bfe, #74b9ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 24px;
+        }
+
+        .step-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+
+        @media (min-width: 768px) {
+            .step-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .step-full {
+                grid-column: span 2;
+            }
+        }
+
+        .step {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            padding: 20px;
+            border-radius: 16px;
+            transition: transform 0.2s;
+        }
+
+        .step:hover {
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .step h3 {
+            margin: 0 0 8px;
+            font-size: 16px;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .step h3::before {
+            content: '';
+            display: block;
+            width: 8px;
+            height: 8px;
+            background-color: var(--primary-color);
+            border-radius: 50%;
+        }
+
+        .step p {
+            font-size: 13px;
+            color: var(--text-sub);
+            margin: 0 0 15px;
+            line-height: 1.5;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100px;
+            background-color: rgba(0, 0, 0, 0.3);
+            color: #00cec9;
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            padding: 12px;
+            resize: none;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        textarea:focus {
+            border-color: var(--primary-color);
+        }
+
+        textarea::placeholder {
+            color: rgba(255, 255, 255, 0.2);
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background-color: var(--primary-color);
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 12px;
+            transition: all 0.2s;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            background-color: #636e72;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* --- Chat Section --- */
+        #chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        #chat-header {
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #chat-header h2 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        #status {
+            font-size: 12px;
+            padding: 4px 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 20px;
+            color: var(--system-msg);
+        }
+
+        #messages {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .message {
+            max-width: 80%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message .text {
+            padding: 10px 16px;
+            border-radius: 18px;
+            font-size: 15px;
+            line-height: 1.5;
+            position: relative;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            word-break: break-word;
+        }
+
+        /* 시스템 메시지 */
+        .message.system {
+            align-self: center;
+            max-width: 90%;
+            font-size: 12px;
+            color: var(--text-sub);
+            margin: 10px 0;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 6px 12px;
+            border-radius: 20px;
+        }
+
+        /* 상대방 메시지 */
+        .message.remote {
+            align-self: flex-start;
+        }
+
+        .message.remote .text {
+            background-color: var(--bubble-remote);
+            color: var(--text-main);
+            border-bottom-left-radius: 4px;
+        }
+
+        /* 내 메시지 */
+        .message.local {
+            align-self: flex-end;
+        }
+
+        .message.local .text {
+            background-color: var(--bubble-local);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        #message-form {
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border-top: 1px solid var(--glass-border);
+            display: flex;
+            gap: 10px;
+        }
+
+        #message-input {
+            flex-grow: 1;
+            padding: 14px;
+            border-radius: 12px;
+            border: 1px solid var(--glass-border);
+            background-color: rgba(0, 0, 0, 0.3);
+            color: white;
+            font-size: 15px;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        #message-input:focus {
+            border-color: var(--primary-color);
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        #send-btn {
+            width: auto;
+            margin: 0;
+            padding: 0 24px;
+            border-radius: 12px;
+            background: var(--primary-color);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="app-container" class="container">
+
+        <!-- Signaling View -->
+        <div id="signaling-container">
+            <h2>🔐 보안 P2P 연결 설정</h2>
+
+            <div class="step-grid">
+                <!-- Step 1 -->
+                <div class="step">
+                    <h3>User A: 방 만들기</h3>
+                    <p>채팅방을 개설합니다. 아래 버튼을 눌러 생성된 코드를 친구에게 보내주세요.</p>
+                    <button id="create-offer-btn">1. 연결 코드 생성</button>
+                    <textarea id="offer-sdp" placeholder="[생성된 코드 대기중...]" readonly
+                        style="margin-top: 10px;"></textarea>
+                </div>
+
+                <!-- Step 2 -->
+                <div class="step">
+                    <h3>User B: 참여하기</h3>
+                    <p>친구가 보낸 코드를 아래에 넣고 '응답 코드'를 생성하여 친구에게 다시 보내주세요.</p>
+                    <textarea id="received-sdp-answer" placeholder="친구의 연결 코드를 여기에 붙여넣으세요"></textarea>
+                    <button id="create-answer-btn">2. 응답 코드 생성</button>
+                    <textarea id="answer-sdp" placeholder="[응답 코드 대기중...]" readonly
+                        style="margin-top: 10px;"></textarea>
+                </div>
+
+                <!-- Step 3 -->
+                <div class="step step-full">
+                    <h3>User A: 연결 확정</h3>
+                    <p>친구가 보낸 '응답 코드'를 여기에 입력하여 연결을 마무리하세요.</p>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <textarea id="received-sdp-final" placeholder="친구의 응답 코드를 여기에 붙여넣으세요"
+                            style="flex: 1; min-width: 250px;"></textarea>
+                        <button id="connect-btn" style="flex: 0 0 120px; margin-top: 0; height: auto;">3. 연결 시작
+                            🚀</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat View -->
+        <div id="chat-container" class="hidden">
+            <div id="chat-header">
+                <h2>💬 Secret Chat</h2>
+                <div id="status">연결 대기중...</div>
+            </div>
+            <div id="messages">
+                <div class="message system">P2P 연결은 암호화되어 전송됩니다.</div>
+            </div>
+            <form id="message-form">
+                <input type="text" id="message-input" placeholder="메시지를 입력하세요..." autocomplete="off" disabled>
+                <button type="submit" id="send-btn" disabled>전송</button>
+            </form>
+        </div>
+
+    </div>
+
+    <!-- JavaScript 로직은 원본과 100% 동일하게 유지 -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const signalingContainer = document.getElementById('signaling-container');
+            const chatContainer = document.getElementById('chat-container');
+            const statusDiv = document.getElementById('status');
+            const messagesDiv = document.getElementById('messages');
+            const messageForm = document.getElementById('message-form');
+            const messageInput = document.getElementById('message-input');
+            const sendBtn = document.getElementById('send-btn');
+
+            const createOfferBtn = document.getElementById('create-offer-btn');
+            const createAnswerBtn = document.getElementById('create-answer-btn');
+            const connectBtn = document.getElementById('connect-btn');
+
+            const offerSdpText = document.getElementById('offer-sdp');
+            const answerSdpText = document.getElementById('answer-sdp');
+            const receivedSdpAnswerText = document.getElementById('received-sdp-answer');
+            const receivedSdpFinalText = document.getElementById('received-sdp-final');
+
+            let peerConnection;
+            let dataChannel;
+
+            const iceServers = {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' }
+                ]
+            };
+
+            const logSystemMessage = (text) => {
+                const msgDiv = document.createElement('div');
+                msgDiv.className = 'message system';
+                msgDiv.textContent = text;
+                messagesDiv.appendChild(msgDiv);
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            };
+
+            const setupPeerConnection = () => {
+                peerConnection = new RTCPeerConnection(iceServers);
+
+                peerConnection.onicecandidate = event => {
+                    if (event.candidate) {
+                        // ICE candidate gathering
+                    } else {
+                        const sdp = JSON.stringify(peerConnection.localDescription);
+                        if (peerConnection.localDescription.type === 'offer') {
+                            offerSdpText.value = sdp;
+                        } else if (peerConnection.localDescription.type === 'answer') {
+                            answerSdpText.value = sdp;
+                        }
+                    }
+                };
+
+                peerConnection.onconnectionstatechange = () => {
+                    const state = peerConnection.connectionState;
+                    statusDiv.textContent = `상태: ${state}`;
+                    if (state === 'connected') {
+                        signalingContainer.classList.add('hidden');
+                        chatContainer.classList.remove('hidden');
+                        // Flex display 복구
+                        chatContainer.style.display = 'flex';
+                        messageInput.disabled = false;
+                        sendBtn.disabled = false;
+                        logSystemMessage('✅ P2P 연결 성공! 대화를 시작하세요.');
+                    } else if (state === 'failed' || state === 'disconnected') {
+                        statusDiv.style.color = '#ff7675';
+                        logSystemMessage('❌ 연결이 끊어졌습니다.');
+                        messageInput.disabled = true;
+                        sendBtn.disabled = true;
+                    }
+                };
+
+                peerConnection.ondatachannel = event => {
+                    dataChannel = event.channel;
+                    setupDataChannelEvents();
+                };
+            };
+
+            const setupDataChannelEvents = () => {
+                dataChannel.onopen = () => {
+                    // System msg already logged via connection state
+                };
+                dataChannel.onclose = () => {
+                    logSystemMessage('데이터 채널 종료됨');
+                };
+                dataChannel.onmessage = event => {
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = 'message remote';
+                    const textDiv = document.createElement('div');
+                    textDiv.className = 'text';
+                    textDiv.textContent = event.data;
+                    msgDiv.appendChild(textDiv);
+                    messagesDiv.appendChild(msgDiv);
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                };
+            };
+
+            createOfferBtn.onclick = async () => {
+                setupPeerConnection();
+                dataChannel = peerConnection.createDataChannel('chat');
+                setupDataChannelEvents();
+
+                try {
+                    const offer = await peerConnection.createOffer();
+                    await peerConnection.setLocalDescription(offer);
+                    offerSdpText.placeholder = "생성 중... (1~2분 정도 소요됩니다)";
+                } catch (e) {
+                    alert(`오류: ${e}`);
+                }
+            };
+
+            createAnswerBtn.onclick = async () => {
+                if (!receivedSdpAnswerText.value) {
+                    alert('친구에게 받은 코드를 입력해주세요.');
+                    receivedSdpAnswerText.focus();
+                    return;
+                }
+                setupPeerConnection();
+
+                try {
+                    const offer = JSON.parse(receivedSdpAnswerText.value);
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                    answerSdpText.placeholder = "생성 중...";
+                } catch (e) {
+                    alert(`코드 형식이 잘못되었습니다. 다시 확인해주세요.\n\n${e}`);
+                }
+            };
+
+            connectBtn.onclick = async () => {
+                if (!receivedSdpFinalText.value) {
+                    alert('친구에게 받은 응답 코드를 입력해주세요.');
+                    receivedSdpFinalText.focus();
+                    return;
+                }
+                try {
+                    const answer = JSON.parse(receivedSdpFinalText.value);
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                } catch (e) {
+                    alert(`코드 형식이 잘못되었습니다.\n\n${e}`);
+                }
+            };
+
+            messageForm.onsubmit = e => {
+                e.preventDefault();
+                const message = messageInput.value.trim();
+                if (message && dataChannel.readyState === 'open') {
+                    dataChannel.send(message);
+
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = 'message local';
+                    const textDiv = document.createElement('div');
+                    textDiv.className = 'text';
+                    textDiv.textContent = message;
+                    msgDiv.appendChild(textDiv);
+                    messagesDiv.appendChild(msgDiv);
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+                    messageInput.value = '';
+                }
+            };
+        });
+    </script>
+</body>
+
+</html>
